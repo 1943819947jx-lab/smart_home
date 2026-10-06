@@ -1,0 +1,33 @@
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <time.h>
+
+extern int fifo_init_for_write(void);
+
+void *sensor_simulator_thread(void *arg) {
+    int *keep_running = (int *)arg;
+    int fd = fifo_init_for_write();
+    srand(time(NULL));
+
+    printf("[模拟器] 启动，每%d秒生成一次数据\n", SAMPLE_INTERVAL);
+
+    while (*keep_running) {
+        sensor_data_t data;
+        data.timestamp = time(NULL);
+        data.temp      = 20.0f + (rand() % 200) / 10.0f;
+        data.humidity  = 30.0f + (rand() % 600) / 10.0f;
+        data.lux       = rand() % 100000;
+
+        if (write(fd, &data, sizeof(data)) != 0) {
+            perror("mq_send");
+        }
+        sleep(SAMPLE_INTERVAL);
+    }
+
+    close(fd);
+    printf("[模拟器] 退出\n");
+    return NULL;
+}

@@ -1,0 +1,65 @@
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <time.h>
+
+extern int fifo_init_for_write(void);
+
+/* 读取 CPU 温度（毫摄氏度 → 摄氏度） */
+static float read_cpu_temp(void)
+{
+    FILE *fp = fopen("/sys/class/thermal/thermal_zone0/temp", "r");
+    if (!fp) {
+        return 25.0f;
+    }
+
+    int millicelsius;
+    if (fscanf(fp, "%d", &millicelsius) != 1) {
+        fclose(fp);
+        return 25.0f;
+    }
+    fclose(fp);
+
+    return millicelsius / 1000.0f;
+}
+
+void *sensor_simulator_thread(void *arg) {
+    int *keep_running = (int *)arg;
+    int fd = fifo_init_for_write();
+    srand(time(NULL));
+
+    printf("[模拟器] 启动（温度=板载CPU传感器, 湿度=温度反推模拟）\n");
+    printf("[模拟器] 采样间隔=%d秒\n", SAMPLE_INTERVAL);
+
+    while (*keep_running) {
+        sensor_data_t data;
+        data.timestamp = time(NULL);
+
+        /* 温度：真实 CPU 传感器 */
+        data.temp = read_cpu_temp();
+
+        /* 湿度：基于温度反推 */
+        float base = 80.0f - data.temp * 1.2f;
+        if (base < 20.0f) base = 20.0f;
+        if (base > 70.0f) base = 70.0f;
+        float delta = (rand() % 101 - 50) / 10.0f;
+        data.humidity = base + delta;
+        if (data.humidity < 0.0f)  data.humidity = 0.0f;
+        if (data.humidity > 100.0f) data.humidity = 100.0f;
+
+        /* 光照：随机模拟 */
+        data.lux = 5000 + (rand() % 5000);
+
+        if (write(fd, &data, sizeof(data)) == -1) {
+            perror("[模拟器] write FIFO 失败");
+        }
+
+        sleep(SAMPLE_INTERVAL);
+    }
+
+    close(fd);
+    printf("[模拟器] 已退出\n");
+    return NULL;
+}

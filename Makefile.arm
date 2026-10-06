@@ -1,0 +1,29 @@
+CC      = arm-linux-gnueabihf-gcc
+ARM_LIB = $(HOME)/arm_libs
+CFLAGS  = -Wall -Wextra -g -pthread \
+          -I$(ARM_LIB)/include \
+          -I$(ARM_LIB)/include/cjson
+LDFLAGS = -L$(ARM_LIB)/lib -lrt -lpthread -lsqlite3 -lcjson -lm -ldl -static
+
+BUILD   = build
+TARGET  = $(BUILD)/smart_home_arm
+
+SRCS = src/main.c src/sensor_simulator.c src/collector.c src/alert_engine.c src/http_server.c src/logger.c src/ipc.c src/dht11_reader.c 
+
+
+
+all: $(TARGET)
+
+$(TARGET): $(SRCS) | $(BUILD)
+	$(CC) $(CFLAGS) $(SRCS) -o $@ $(LDFLAGS)
+	@echo "========== ARM交叉编译完成 =========="
+	@echo "可执行文件: $(TARGET)"
+	@file $(TARGET)
+
+$(BUILD):
+	@mkdir -p $(BUILD)
+
+clean:
+	rm -rf $(BUILD)
+
+.PHONY: all clean

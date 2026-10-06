@@ -1,0 +1,2 @@
+Hello,Linux File IO
+传感器数据temp=36°c

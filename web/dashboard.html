@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>🏠 智能家居监控</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee;
+               max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1 { text-align: center; margin-bottom: 20px; font-size: 1.5em; color: #e94560; }
+        .gauges { display: flex; gap: 16px; margin-bottom: 20px; }
+        .card { flex: 1; background: #16213e; border: 1px solid #0f3460;
+                border-radius: 12px; padding: 20px; text-align: center; }
+        .card .label { font-size: 0.85em; color: #aaa; margin-bottom: 8px; }
+        .card .value { font-size: 2em; font-weight: bold; }
+        .card .unit { font-size: 0.7em; color: #888; }
+        .chart-box { background: #16213e; border: 1px solid #0f3460;
+                     border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+        .alerts-box { background: #16213e; border: 1px solid #0f3460;
+                      border-radius: 12px; padding: 16px; }
+        .alerts-box h3 { color: #e94560; margin-bottom: 10px; }
+        .alert-item { background: #2d2d44; padding: 8px 12px; border-radius: 6px;
+                      margin-bottom: 6px; font-size: 0.9em; border-left: 3px solid #e94560; }
+        .status { display: flex; gap: 20px; justify-content: center; margin-bottom: 20px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .status-dot.online { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+    </style>
+</head>
+<body>
+    <h1>🏠 智能家居数据采集与监控系统</h1>
+
+    <div class="gauges">
+        <div class="card">
+            <div class="label">🌡️ 温度</div>
+            <div class="value" id="temp" style="color:#ff6b6b;">--</div>
+            <div class="unit">°C</div>
+        </div>
+        <div class="card">
+            <div class="label">💧 湿度</div>
+            <div class="value" id="hum" style="color:#48dbfb;">--</div>
+            <div class="unit">%</div>
+        </div>
+        <div class="card">
+            <div class="label">☀️ 光照</div>
+            <div class="value" id="lux" style="color:#feca57;">--</div>
+            <div class="unit">lux</div>
+        </div>
+    </div>
+
+    <div class="chart-box">
+        <canvas id="chart" height="260"></canvas>
+    </div>
+
+    <div class="alerts-box">
+        <h3>⚠️ 告警记录</h3>
+        <div id="alert-list">暂无告警</div>
+    </div>
+
+    <script>
+        // ====== Chart.js 图表 ======
+        const ctx = document.getElementById('chart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: '温度 °C', data: [], borderColor: '#ff6b6b',
+                      backgroundColor: 'rgba(255,107,107,0.1)', tension: 0.3, fill: true },
+                    { label: '湿度 %',  data: [], borderColor: '#48dbfb',
+                      backgroundColor: 'rgba(72,219,251,0.1)', tension: 0.3, fill: true }
+                ]
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                plugins: { legend: { labels: { color: '#aaa' } } },
+                scales: {
+                    x: { ticks: { color: '#666', maxTicksLimit: 10 } },
+                    y: { ticks: { color: '#666' }, beginAtZero: false }
+                }
+            }
+        });
+
+        const MAX_POINTS = 60;  // 保留最近60个数据点（2分钟）
+
+        // ====== 每2秒轮询传感器数据 ======
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/data');
+                const d = await res.json();
+
+                document.getElementById('temp').textContent = d.temp.toFixed(1);
+                document.getElementById('hum').textContent  = d.humidity.toFixed(1);
+                document.getElementById('lux').textContent  = d.lux;
+
+                const now = new Date().toLocaleTimeString();
+                chart.data.labels.push(now);
+                chart.data.datasets[0].data.push(d.temp);
+                chart.data.datasets[1].data.push(d.humidity);
+
+                // 限制长度，超出就删最旧的
+                while (chart.data.labels.length > MAX_POINTS) {
+                    chart.data.labels.shift();
+                    chart.data.datasets.forEach(ds => ds.data.shift());
+                }
+                chart.update();
+            } catch(e) {
+                console.log('请求失败，后端还没启动？');
+            }
+        }
+
+        // ====== 每5秒轮询告警 ======
+        async function fetchAlerts() {
+            try {
+                const res = await fetch('/api/alerts');
+                const alerts = await res.json();
+                const el = document.getElementById('alert-list');
+                if (alerts.length === 0) {
+                    el.innerHTML = '<div style="color:#888;">暂无告警</div>';
+                } else {
+                    el.innerHTML = alerts
+                        .map(a => `<div class="alert-item">
+                            [${new Date(a.timestamp*1000).toLocaleTimeString()}]
+                            ${a.message}
+                        </div>`)
+                        .join('');
+                }
+            } catch(e) {}
+        }
+
+        fetchData();
+        fetchAlerts();
+        setInterval(fetchData, 2000);
+        setInterval(fetchAlerts, 5000);
+    </script>
+</body>
+</html>
